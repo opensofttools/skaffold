@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/color"
-	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/latest"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -70,10 +69,7 @@ func TestColorPicker(t *testing.T) {
 		},
 	}
 
-	picker := NewColorPicker([]*latest.Artifact{
-		{ImageName: "image"},
-		{ImageName: "second"},
-	})
+	picker := NewColorPicker([]string{"image", "second"})
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {

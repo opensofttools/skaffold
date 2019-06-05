@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,22 +17,19 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/constants"
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/util"
-
-	yaml "gopkg.in/yaml.v2"
 )
 
 const Version string = "skaffold/v1alpha1"
 
-// NewSkaffoldPipeline creates a SkaffoldPipeline
-func NewSkaffoldPipeline() util.VersionedConfig {
-	return new(SkaffoldPipeline)
+// NewSkaffoldConfig creates a SkaffoldConfig
+func NewSkaffoldConfig() util.VersionedConfig {
+	return new(SkaffoldConfig)
 }
 
-// SkaffoldPipeline is the top level config object
+// SkaffoldConfig is the top level config object
 // that is parsed from a skaffold.yaml
-type SkaffoldPipeline struct {
+type SkaffoldConfig struct {
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`
 
@@ -40,7 +37,7 @@ type SkaffoldPipeline struct {
 	Deploy DeployConfig `yaml:"deploy"`
 }
 
-func (config *SkaffoldPipeline) GetVersion() string {
+func (config *SkaffoldConfig) GetVersion() string {
 	return config.APIVersion
 }
 
@@ -54,8 +51,8 @@ type BuildConfig struct {
 // BuildType contains the specific implementation and parameters needed
 // for the build step. Only one field should be populated.
 type BuildType struct {
-	LocalBuild       *LocalBuild       `yaml:"local,omitempty"`
-	GoogleCloudBuild *GoogleCloudBuild `yaml:"googleCloudBuild,omitempty"`
+	LocalBuild       *LocalBuild       `yaml:"local,omitempty" yamltags:"oneOf=build"`
+	GoogleCloudBuild *GoogleCloudBuild `yaml:"googleCloudBuild,omitempty" yamltags:"oneOf=build"`
 }
 
 // LocalBuild contains the fields needed to do a build on the local docker daemon
@@ -77,8 +74,8 @@ type DeployConfig struct {
 // DeployType contains the specific implementation and parameters needed
 // for the deploy step. Only one field should be populated.
 type DeployType struct {
-	HelmDeploy    *HelmDeploy    `yaml:"helm,omitempty"`
-	KubectlDeploy *KubectlDeploy `yaml:"kubectl,omitempty"`
+	HelmDeploy    *HelmDeploy    `yaml:"helm,omitempty" yamltags:"oneOf=deploy"`
+	KubectlDeploy *KubectlDeploy `yaml:"kubectl,omitempty" yamltags:"oneOf=deploy"`
 }
 
 // KubectlDeploy contains the configuration needed for deploying with `kubectl apply`
@@ -111,42 +108,4 @@ type Artifact struct {
 	DockerfilePath string             `yaml:"dockerfilePath,omitempty"`
 	Workspace      string             `yaml:"workspace"`
 	BuildArgs      map[string]*string `yaml:"buildArgs,omitempty"`
-}
-
-// DefaultDevSkaffoldPipeline is a partial set of defaults for the SkaffoldPipeline
-// when dev mode is specified.
-// Each API is responsible for setting its own defaults that are not top level.
-var defaultDevSkaffoldPipeline = &SkaffoldPipeline{
-	Build: BuildConfig{
-		TagPolicy: constants.DefaultDevTagStrategy,
-	},
-}
-
-// DefaultRunSkaffoldPipeline is a partial set of defaults for the SkaffoldPipeline
-// when run mode is specified.
-// Each API is responsible for setting its own defaults that are not top level.
-var defaultRunSkaffoldPipeline = &SkaffoldPipeline{
-	Build: BuildConfig{
-		TagPolicy: constants.DefaultRunTagStrategy,
-	},
-}
-
-// Parse reads from an io.Reader and unmarshals the result into a SkaffoldPipeline.
-// The default config argument provides default values for the config,
-// which can be overridden if present in the config file.
-func (config *SkaffoldPipeline) Parse(contents []byte, useDefault bool) error {
-	if useDefault {
-		*config = *config.getDefaultForMode(false)
-	} else {
-		*config = SkaffoldPipeline{}
-	}
-
-	return yaml.UnmarshalStrict(contents, config)
-}
-
-func (config *SkaffoldPipeline) getDefaultForMode(dev bool) *SkaffoldPipeline {
-	if dev {
-		return defaultDevSkaffoldPipeline
-	}
-	return defaultRunSkaffoldPipeline
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,13 +20,14 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
+	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/constants"
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/kubernetes/context"
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/util"
 
-	"github.com/mitchellh/go-homedir"
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 const defaultConfigDir = ".skaffold"
@@ -169,6 +170,61 @@ func GetDefaultRepo(cliValue string) (string, error) {
 			defaultRepo = cfg.DefaultRepo
 		}
 	}
-
 	return defaultRepo, nil
+}
+
+func GetLocalCluster() (bool, error) {
+	cfg, err := GetConfigForKubectx()
+	localCluster := isDefaultLocal(kubecontext)
+	if err != nil {
+		return localCluster, errors.Wrap(err, "retrieving global config")
+	}
+
+	if cfg != nil {
+		if cfg.LocalCluster != nil {
+			localCluster = *cfg.LocalCluster
+		}
+	} else {
+		// if no value is set for this cluster, fall back to the global setting
+		globalCfg, err := GetGlobalConfig()
+		if err != nil {
+			return localCluster, errors.Wrap(err, "retrieving global config")
+		}
+		if globalCfg != nil && globalCfg.LocalCluster != nil {
+			localCluster = *globalCfg.LocalCluster
+		}
+	}
+
+	return localCluster, nil
+}
+
+func GetInsecureRegistries() ([]string, error) {
+	cfg, err := GetConfigForKubectx()
+	registries := []string{}
+	if err != nil {
+		return registries, errors.Wrap(err, "retrieving global config")
+	}
+
+	if cfg != nil {
+		if cfg.InsecureRegistries != nil {
+			registries = cfg.InsecureRegistries
+		}
+	} else {
+		// if no value is set for this cluster, fall back to the global setting
+		globalCfg, err := GetGlobalConfig()
+		if err != nil {
+			return registries, errors.Wrap(err, "retrieving global config")
+		}
+		if globalCfg != nil && globalCfg.InsecureRegistries != nil {
+			registries = globalCfg.InsecureRegistries
+		}
+	}
+
+	return registries, nil
+}
+
+func isDefaultLocal(kubeContext string) bool {
+	return kubeContext == constants.DefaultMinikubeContext ||
+		kubeContext == constants.DefaultDockerForDesktopContext ||
+		kubeContext == constants.DefaultDockerDesktopContext
 }

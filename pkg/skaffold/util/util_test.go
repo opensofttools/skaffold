@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/latest"
 	"github.com/GoogleContainerTools/skaffold/testutil"
 )
 
@@ -50,13 +51,11 @@ func TestSupportedKubernetesFormats(t *testing.T) {
 			out:         false,
 		},
 	}
+	for _, test := range tests {
+		testutil.Run(t, test.description, func(t *testutil.T) {
+			actual := IsSupportedKubernetesFormat(test.in)
 
-	for _, tt := range tests {
-		t.Run(tt.description, func(t *testing.T) {
-			actual := IsSupportedKubernetesFormat(tt.in)
-			if tt.out != actual {
-				t.Errorf("out: %t, actual: %t", tt.out, actual)
-			}
+			t.CheckDeepEqual(test.out, actual)
 		})
 	}
 }
@@ -89,31 +88,14 @@ func TestExpandPathsGlob(t *testing.T) {
 			in:          []string{"dir*"},
 			out:         []string{tmpDir.Path("dir/sub_dir/file"), tmpDir.Path("dir_b/sub_dir_b/file")},
 		},
-		{
-			description: "error unmatched glob",
-			in:          []string{"dir/sub_dir_c/*"},
-			shouldErr:   true,
-		},
 	}
+	for _, test := range tests {
+		testutil.Run(t, test.description, func(t *testutil.T) {
+			actual, err := ExpandPathsGlob(tmpDir.Root(), test.in)
 
-	for _, tt := range tests {
-		t.Run(tt.description, func(t *testing.T) {
-			actual, err := ExpandPathsGlob(tmpDir.Root(), tt.in)
-
-			testutil.CheckErrorAndDeepEqual(t, tt.shouldErr, err, tt.out, actual)
+			t.CheckErrorAndDeepEqual(test.shouldErr, err, test.out, actual)
 		})
 	}
-}
-
-func TestDefaultConfigFilenameAlternate(t *testing.T) {
-	tmpDir, cleanup := testutil.NewTempDir(t)
-	defer cleanup()
-
-	tmpDir.Write("skaffold.yml", "foo")
-
-	content, err := ReadConfiguration(tmpDir.Path("skaffold.yaml"))
-
-	testutil.CheckErrorAndDeepEqual(t, false, err, []byte("foo"), content)
 }
 
 func TestExpand(t *testing.T) {
@@ -167,12 +149,11 @@ func TestExpand(t *testing.T) {
 			expected:    "VALUE",
 		},
 	}
-
 	for _, test := range tests {
-		t.Run(test.description, func(t *testing.T) {
+		testutil.Run(t, test.description, func(t *testutil.T) {
 			actual := Expand(test.text, test.key, test.value)
 
-			testutil.CheckDeepEqual(t, test.expected, actual)
+			t.CheckDeepEqual(test.expected, actual)
 		})
 	}
 }
@@ -195,7 +176,7 @@ func TestAbsFile(t *testing.T) {
 }
 
 func TestNonEmptyLines(t *testing.T) {
-	var testCases = []struct {
+	var tests = []struct {
 		in  string
 		out []string
 	}{
@@ -206,10 +187,104 @@ func TestNonEmptyLines(t *testing.T) {
 		{"a\r\nb\n\n", []string{"a", "b"}},
 		{"\na\r\n\n\n", []string{"a"}},
 	}
-	for _, tt := range testCases {
-		t.Run(tt.in, func(t *testing.T) {
-			result := NonEmptyLines([]byte(tt.in))
-			testutil.CheckDeepEqual(t, tt.out, result)
+	for _, test := range tests {
+		testutil.Run(t, "", func(t *testutil.T) {
+			result := NonEmptyLines([]byte(test.in))
+
+			t.CheckDeepEqual(test.out, result)
 		})
 	}
+}
+
+func TestCloneThroughJSON(t *testing.T) {
+	tests := []struct {
+		description string
+		old         interface{}
+		new         interface{}
+		expected    interface{}
+	}{
+		{
+			description: "google cloud build",
+			old: map[string]string{
+				"projectId": "unit-test",
+			},
+			new: &latest.GoogleCloudBuild{},
+			expected: &latest.GoogleCloudBuild{
+				ProjectID: "unit-test",
+			},
+		},
+	}
+	for _, test := range tests {
+		testutil.Run(t, test.description, func(t *testutil.T) {
+			err := CloneThroughJSON(test.old, test.new)
+
+			t.CheckErrorAndDeepEqual(false, err, test.expected, test.new)
+		})
+	}
+}
+
+func TestIsHiddenDir(t *testing.T) {
+	tests := []struct {
+		description string
+		filename    string
+		expected    bool
+	}{
+		{
+			description: "hidden dir",
+			filename:    ".hidden",
+			expected:    true,
+		},
+		{
+			description: "not hidden dir",
+			filename:    "not_hidden",
+			expected:    false,
+		},
+		{
+			description: "current dir",
+			filename:    ".",
+			expected:    false,
+		},
+	}
+	for _, test := range tests {
+		testutil.Run(t, test.description, func(t *testutil.T) {
+			isHidden := IsHiddenDir(test.filename)
+
+			t.CheckDeepEqual(test.expected, isHidden)
+		})
+	}
+}
+
+func TestIsHiddenFile(t *testing.T) {
+	tests := []struct {
+		description string
+		filename    string
+		expected    bool
+	}{
+		{
+			description: "hidden file name",
+			filename:    ".hidden",
+			expected:    true,
+		},
+		{
+			description: "not hidden file",
+			filename:    "not_hidden",
+			expected:    false,
+		},
+	}
+	for _, test := range tests {
+		testutil.Run(t, test.description, func(t *testutil.T) {
+			isHidden := IsHiddenDir(test.filename)
+
+			t.CheckDeepEqual(test.expected, isHidden)
+		})
+	}
+}
+
+func TestRemoveFromSlice(t *testing.T) {
+	testutil.CheckDeepEqual(t, []string{""}, RemoveFromSlice([]string{""}, "ANY"))
+	testutil.CheckDeepEqual(t, []string{"A", "B", "C"}, RemoveFromSlice([]string{"A", "B", "C"}, "ANY"))
+	testutil.CheckDeepEqual(t, []string{"A", "C"}, RemoveFromSlice([]string{"A", "B", "C"}, "B"))
+	testutil.CheckDeepEqual(t, []string{"B", "C"}, RemoveFromSlice([]string{"A", "B", "C"}, "A"))
+	testutil.CheckDeepEqual(t, []string{"A", "C"}, RemoveFromSlice([]string{"A", "B", "B", "C"}, "B"))
+	testutil.CheckDeepEqual(t, []string{}, RemoveFromSlice([]string{"B", "B"}, "B"))
 }

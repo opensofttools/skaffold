@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,19 +27,19 @@ import (
 func GenerateLabelsFromPR(prNumber int) map[string]string {
 	m := map[string]string{}
 	m["docs-controller-deployment"] = "true"
-	k, v := retrieveLabel(prNumber)
+	k, v := RetrieveLabel(prNumber)
 	m[k] = v
 	return m
 }
 
 // Selector returns the label associated with the pull request
 func Selector(prNumber int) string {
-	k, v := retrieveLabel(prNumber)
+	k, v := RetrieveLabel(prNumber)
 	return fmt.Sprintf("%s=%s", k, v)
 }
 
-// retrieveLabel returns the key and value for a label associated with this PR number
-func retrieveLabel(prNumber int) (string, string) {
+// RetrieveLabel returns the key and value for a label associated with this PR number
+func RetrieveLabel(prNumber int) (string, string) {
 	value := fmt.Sprintf("docs-controller-deployment-%d", prNumber)
 	return "deployment", value
 }

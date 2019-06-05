@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,36 +31,50 @@ const (
 	// context directory
 	DefaultDockerfilePath = "Dockerfile"
 
-	DefaultDevTagStrategy = TagStrategySha256
-	DefaultRunTagStrategy = TagStrategyGitCommit
-
-	// TagStrategySha256 uses the checksum of the built artifact as the tag
-	TagStrategySha256    = "sha256"
-	TagStrategyGitCommit = "gitCommit"
-
 	DefaultMinikubeContext         = "minikube"
 	DefaultDockerForDesktopContext = "docker-for-desktop"
+	DefaultDockerDesktopContext    = "docker-desktop"
 	GCSBucketSuffix                = "_cloudbuild"
 
 	HelmOverridesFilename = "skaffold-overrides.yaml"
 
 	DefaultKustomizationPath = "."
 
-	DefaultKanikoImage             = "gcr.io/kaniko-project/executor:v0.4.0@sha256:0bbaa4859eec9796d32ab45e6c1627562dbc7796e40450295b9604cd3f4197af"
-	DefaultKanikoSecretName        = "kaniko-secret"
-	DefaultKanikoTimeout           = "20m"
-	DefaultKanikoContainerName     = "kaniko"
-	DefaultKanikoEmptyDirName      = "kaniko-emptydir"
-	DefaultKanikoEmptyDirMountPath = "/kaniko/buildcontext"
+	DefaultKanikoImage                  = "gcr.io/kaniko-project/executor:v0.9.0@sha256:d9fe474f80b73808dc12b54f45f5fc90f7856d9fc699d4a5e79d968a1aef1a72"
+	DefaultKanikoSecretName             = "kaniko-secret"
+	DefaultKanikoTimeout                = "20m"
+	DefaultKanikoContainerName          = "kaniko"
+	DefaultKanikoEmptyDirName           = "kaniko-emptydir"
+	DefaultKanikoEmptyDirMountPath      = "/kaniko/buildcontext"
+	DefaultKanikoCacheDirName           = "kaniko-cache"
+	DefaultKanikoCacheDirMountPath      = "/cache"
+	DefaultKanikoDockerConfigSecretName = "docker-cfg"
+	DefaultKanikoDockerConfigPath       = "/kaniko/.docker"
 
-	DefaultAlpineImage = "alpine"
+	DefaultBusyboxImage = "busybox"
 
 	UpdateCheckEnvironmentVariable = "SKAFFOLD_UPDATE_CHECK"
 
 	DefaultCloudBuildDockerImage = "gcr.io/cloud-builders/docker"
+	DefaultCloudBuildMavenImage  = "gcr.io/cloud-builders/mvn@sha256:0ec283f2ee1ab1d2ac779dcbb24bddaa46275aec7088cc10f2926b4ea0fcac9b"
+	DefaultCloudBuildGradleImage = "gcr.io/cloud-builders/gradle"
 
-	// A regex matching valid repository names (https://github.com/docker/distribution/blob/master/reference/reference.go)
-	RepositoryComponentRegex string = `^[a-z\d]+(?:(?:[_.]|__|-+)[a-z\d]+)*$`
+	DefaultSkaffoldDir = ".skaffold"
+	DefaultCacheFile   = "cache"
+
+	DefaultRPCPort     = 50051
+	DefaultRPCHTTPPort = 50052
+)
+
+var (
+	// Images is an environment variable key, whose value is an array of fully qualified image names passed in to a custom build script.
+	Images = "IMAGES"
+
+	// PushImage lets the custom build script know if the image is expected to be pushed to a remote registry
+	PushImage = "PUSH_IMAGE"
+
+	// BuildContext is the absolute path to a directory this artifact is meant to be built from for custom artifacts
+	BuildContext = "BUILD_CONTEXT"
 )
 
 var DefaultKubectlManifests = []string{"k8s/*.yaml"}
@@ -72,13 +86,9 @@ var Labels = struct {
 	Deployer         string
 	Builder          string
 	DockerAPIVersion string
-	DefaultLabels    map[string]string
 }{
-	DefaultLabels: map[string]string{
-		"deployed-with": "skaffold",
-	},
-	TagPolicy:        "skaffold-tag-policy",
-	Deployer:         "skaffold-deployer",
-	Builder:          "skaffold-builder",
-	DockerAPIVersion: "docker-api-version",
+	TagPolicy:        "skaffold.dev/tag-policy",
+	Deployer:         "skaffold.dev/deployer",
+	Builder:          "skaffold.dev/builder",
+	DockerAPIVersion: "skaffold.dev/docker-api-version",
 }

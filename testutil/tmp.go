@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -95,6 +95,11 @@ func (h *TempDir) Write(file, content string) *TempDir {
 	return h.failIfErr(ioutil.WriteFile(h.Path(file), []byte(content), os.ModePerm))
 }
 
+// Rename renames a file from oldname to newname
+func (h *TempDir) Rename(oldName, newName string) *TempDir {
+	return h.failIfErr(os.Rename(h.Path(oldName), h.Path(newName)))
+}
+
 // List lists all the files in the temp directory.
 func (h *TempDir) List() ([]string, error) {
 	var files []string
@@ -122,4 +127,13 @@ func (h *TempDir) failIfErr(err error) *TempDir {
 		h.t.Fatal(err)
 	}
 	return h
+}
+
+// Paths returns the paths to a list of files in the temp directory.
+func (h *TempDir) Paths(files ...string) []string {
+	var paths []string
+	for _, file := range files {
+		paths = append(paths, h.Path(file))
+	}
+	return paths
 }

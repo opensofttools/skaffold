@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,65 +19,39 @@ package cmd
 import (
 	"context"
 	"io"
-	"io/ioutil"
 
+	"github.com/GoogleContainerTools/skaffold/cmd/skaffold/app/flags"
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/build"
-	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/docker"
-	"github.com/pkg/errors"
+	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/runner"
+	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/latest"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
-	images []string
+	buildOutputFile flags.BuildOutputFileFlag
+	preBuiltImages  flags.Images
 )
 
 // NewCmdDeploy describes the CLI command to deploy artifacts.
 func NewCmdDeploy(out io.Writer) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "deploy",
-		Short: "Deploys the artifacts",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDeploy(out)
-		},
-	}
-	AddRunDevFlags(cmd)
-	AddRunDeployFlags(cmd)
-	cmd.Flags().StringSliceVar(&images, "images", nil, "A list of images to deploy")
-	cmd.Flags().BoolVarP(&quietFlag, "quiet", "q", false, "Suppress the deploy output")
-	return cmd
+	return NewCmd(out, "deploy").
+		WithDescription("Deploys the artifacts").
+		WithCommonFlags().
+		WithFlags(func(f *pflag.FlagSet) {
+			f.VarP(&preBuiltImages, "images", "i", "A list of pre-built images to deploy")
+			f.VarP(&buildOutputFile, "build-artifacts", "a", `Filepath containing build output.
+E.g. build.out created by running skaffold build --quiet {{json .}} > build.out`)
+		}).
+		NoArgs(cancelWithCtrlC(context.Background(), doDeploy))
 }
 
-func runDeploy(out io.Writer) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	catchCtrlC(cancel)
+func doDeploy(ctx context.Context, out io.Writer) error {
+	return withRunner(func(r *runner.SkaffoldRunner, _ *latest.SkaffoldConfig) error {
+		// If the BuildArtifacts contains an image in the preBuilt list,
+		// use image from BuildArtifacts instead
+		deployArtifacts := build.MergeWithPreviousBuilds(buildOutputFile.BuildArtifacts(), preBuiltImages.Artifacts())
 
-	r, config, err := newRunner(opts)
-	if err != nil {
-		return errors.Wrap(err, "creating runner")
-	}
-
-	deployOut := out
-	if quietFlag {
-		deployOut = ioutil.Discard
-	}
-
-	var builds []build.Artifact
-	for _, image := range images {
-		parsed, err := docker.ParseReference(image)
-		if err != nil {
-			return err
-		}
-		builds = append(builds, build.Artifact{
-			ImageName: parsed.BaseName,
-			Tag:       image,
-		})
-	}
-
-	if _, err := r.Deploy(ctx, deployOut, builds); err != nil {
-		return err
-	}
-
-	return r.TailLogs(ctx, out, config.Build.Artifacts, builds)
+		return r.Deploy(ctx, out, deployArtifacts)
+	})
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,11 +19,56 @@ package v1alpha3
 import (
 	"testing"
 
-	next "github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/v1alpha4"
+	yaml "gopkg.in/yaml.v2"
+
+	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/v1alpha4"
+	"github.com/GoogleContainerTools/skaffold/testutil"
 )
 
-func TestBuildUpgrade(t *testing.T) {
-	old := `apiVersion: skaffold/v1alpha3
+func TestUpgrade_imageName(t *testing.T) {
+	yaml := `apiVersion: skaffold/v1alpha3
+kind: Config
+build:
+  artifacts:
+  - imageName: gcr.io/k8s-skaffold/skaffold-example
+deploy:
+  kubectl:
+    manifests:
+    - k8s-*
+profiles:
+  - name: test profile
+    build:
+      artifacts:
+      - imageName: gcr.io/k8s-skaffold/skaffold-example
+    deploy:
+      kubectl:
+        manifests:
+        - k8s-*
+`
+	expected := `apiVersion: skaffold/v1alpha4
+kind: Config
+build:
+  artifacts:
+  - image: gcr.io/k8s-skaffold/skaffold-example
+deploy:
+  kubectl:
+    manifests:
+    - k8s-*
+profiles:
+  - name: test profile
+    build:
+      artifacts:
+      - image: gcr.io/k8s-skaffold/skaffold-example
+    deploy:
+      kubectl:
+        manifests:
+        - k8s-*
+`
+	verifyUpgrade(t, yaml, expected)
+}
+
+func TestUpgrade_skipPush(t *testing.T) {
+	yaml := `apiVersion: skaffold/v1alpha3
 kind: Config
 build:
   local:	
@@ -38,37 +83,34 @@ profiles:
       local:
         skipPush: false
 `
-	pipeline := NewSkaffoldPipeline()
-	err := pipeline.Parse([]byte(old), true)
-	if err != nil {
-		t.Errorf("unexpected error during parsing old config: %v", err)
-	}
+	expected := `apiVersion: skaffold/v1alpha4
+kind: Config
+build:
+  local:	
+    push: true
+profiles:
+  - name: testEnv1
+    build:
+      local:
+        push: false
+  - name: testEnv2
+    build:
+      local:
+        push: true
+`
+	verifyUpgrade(t, yaml, expected)
+}
 
-	upgraded, err := pipeline.Upgrade()
-	if err != nil {
-		t.Errorf("unexpected error during upgrade: %v", err)
-	}
+func verifyUpgrade(t *testing.T, input, output string) {
+	config := NewSkaffoldConfig()
+	err := yaml.UnmarshalStrict([]byte(input), config)
+	testutil.CheckErrorAndDeepEqual(t, false, err, Version, config.GetVersion())
 
-	upgradedPipeline := upgraded.(*next.SkaffoldPipeline)
+	upgraded, err := config.Upgrade()
+	testutil.CheckError(t, false, err)
 
-	if upgradedPipeline.Build.LocalBuild == nil {
-		t.Errorf("expected build.local to be not nil")
-	}
-	if upgradedPipeline.Build.LocalBuild.Push != nil && !*upgradedPipeline.Build.LocalBuild.Push {
-		t.Errorf("expected build.local.push to be true but it was: %v", *upgradedPipeline.Build.LocalBuild.Push)
-	}
+	expected := v1alpha4.NewSkaffoldConfig()
+	err = yaml.UnmarshalStrict([]byte(output), expected)
 
-	if upgradedPipeline.Profiles[0].Build.LocalBuild == nil {
-		t.Errorf("expected profiles[0].build.local to be not nil")
-	}
-	if upgradedPipeline.Profiles[0].Build.LocalBuild.Push != nil && *upgradedPipeline.Profiles[0].Build.LocalBuild.Push {
-		t.Errorf("expected profiles[0].build.local.push to be false but it was: %v", *upgradedPipeline.Build.LocalBuild.Push)
-	}
-
-	if upgradedPipeline.Profiles[1].Build.LocalBuild == nil {
-		t.Errorf("expected profiles[1].build.local to be not nil")
-	}
-	if upgradedPipeline.Profiles[1].Build.LocalBuild.Push != nil && !*upgradedPipeline.Profiles[1].Build.LocalBuild.Push {
-		t.Errorf("expected profiles[1].build.local.push to be true but it was: %v", *upgradedPipeline.Build.LocalBuild.Push)
-	}
+	testutil.CheckErrorAndDeepEqual(t, false, err, expected, upgraded)
 }

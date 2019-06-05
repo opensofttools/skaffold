@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,45 +23,45 @@ import (
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/color"
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema"
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/latest"
-	schemautil "github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/util"
-
+	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/validation"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	yaml "gopkg.in/yaml.v2"
 )
 
 func NewCmdFix(out io.Writer) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "fix",
-		Short: "Converts old skaffold.yaml to newest schema version",
-		Run: func(cmd *cobra.Command, args []string) {
-			cfg, err := schema.ParseConfig(opts.ConfigurationFile, false)
-			if err != nil {
-				logrus.Error(err)
-				return
-			}
-
-			if cfg.GetVersion() == latest.Version {
-				color.Default.Fprintln(out, "config is already latest version")
-				return
-			}
-
-			if err := runFix(out, cfg); err != nil {
-				logrus.Errorf("fix: %s", err)
-			}
-		},
-		Args: cobra.NoArgs,
-	}
-	cmd.Flags().StringVarP(&opts.ConfigurationFile, "filename", "f", "skaffold.yaml", "Filename or URL to the pipeline file")
-	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite original config with fixed config")
-	return cmd
+	return NewCmd(out, "fix").
+		WithDescription("Converts old Skaffold config to newest schema version").
+		WithFlags(func(f *pflag.FlagSet) {
+			f.StringVarP(&opts.ConfigurationFile, "filename", "f", "skaffold.yaml", "Filename or URL to the pipeline file")
+			f.BoolVar(&overwrite, "overwrite", false, "Overwrite original config with fixed config")
+		}).
+		NoArgs(doFix)
 }
 
-func runFix(out io.Writer, cfg schemautil.VersionedConfig) error {
-	cfg, err := schema.UpgradeToLatest(cfg)
+func doFix(out io.Writer) error {
+	return fix(out, opts.ConfigurationFile, overwrite)
+}
+
+func fix(out io.Writer, configFile string, overwrite bool) error {
+	cfg, err := schema.ParseConfig(configFile, false)
 	if err != nil {
 		return err
+	}
+
+	if cfg.GetVersion() == latest.Version {
+		color.Default.Fprintln(out, "config is already latest version")
+		return nil
+	}
+
+	cfg, err = schema.ParseConfig(configFile, true)
+	if err != nil {
+		return err
+	}
+
+	if err := validation.Process(cfg.(*latest.SkaffoldConfig)); err != nil {
+		return errors.Wrap(err, "validating upgraded config")
 	}
 
 	newCfg, err := yaml.Marshal(cfg)
@@ -70,7 +70,7 @@ func runFix(out io.Writer, cfg schemautil.VersionedConfig) error {
 	}
 
 	if overwrite {
-		if err := ioutil.WriteFile(opts.ConfigurationFile, newCfg, 0644); err != nil {
+		if err := ioutil.WriteFile(configFile, newCfg, 0644); err != nil {
 			return errors.Wrap(err, "writing config file")
 		}
 		color.Default.Fprintf(out, "New config at version %s generated and written to %s\n", cfg.GetVersion(), opts.ConfigurationFile)

@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,18 +18,10 @@ package deploy
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/build"
-	"k8s.io/apimachinery/pkg/runtime"
 )
-
-// Artifact contains all information about a completed deployment
-type Artifact struct {
-	Obj       *runtime.Object
-	Namespace string
-}
 
 // Deployer is the Deploy API of skaffold and responsible for deploying
 // the build results to a Kubernetes cluster
@@ -38,7 +30,7 @@ type Deployer interface {
 
 	// Deploy should ensure that the build results are deployed to the Kubernetes
 	// cluster.
-	Deploy(context.Context, io.Writer, []build.Artifact) ([]Artifact, error)
+	Deploy(context.Context, io.Writer, []build.Artifact, []Labeller) error
 
 	// Dependencies returns a list of files that the deployer depends on.
 	// In dev mode, a redeploy will be triggered
@@ -46,68 +38,4 @@ type Deployer interface {
 
 	// Cleanup deletes what was deployed by calling Deploy.
 	Cleanup(context.Context, io.Writer) error
-}
-
-type multiDeployer struct {
-	deployers []Deployer
-}
-
-func NewMultiDeployer(deployers []Deployer) Deployer {
-	return &multiDeployer{
-		deployers: deployers,
-	}
-}
-
-func (m *multiDeployer) Labels() map[string]string {
-	labels := map[string]string{}
-	for _, deployer := range m.deployers {
-		for k, v := range deployer.Labels() {
-			labels[k] = v
-		}
-	}
-
-	return labels
-}
-
-func (m *multiDeployer) Deploy(ctx context.Context, out io.Writer, builds []build.Artifact) ([]Artifact, error) {
-	results := []Artifact{}
-	for _, deployer := range m.deployers {
-		a, err := deployer.Deploy(ctx, out, builds)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, a...)
-	}
-
-	return results, nil
-}
-
-func (m *multiDeployer) Dependencies() ([]string, error) {
-	allDeps := []string{}
-
-	for _, deployer := range m.deployers {
-		deps, err := deployer.Dependencies()
-		if err != nil {
-			return allDeps, err
-		}
-
-		allDeps = append(allDeps, deps...)
-	}
-
-	for _, dep := range allDeps {
-		fmt.Println(dep)
-	}
-
-	return allDeps, nil
-}
-
-func (m *multiDeployer) Cleanup(ctx context.Context, w io.Writer) error {
-	for _, deployer := range m.deployers {
-		err := deployer.Cleanup(ctx, w)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

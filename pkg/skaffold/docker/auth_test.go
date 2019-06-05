@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -74,12 +74,13 @@ func TestGetEncodedRegistryAuth(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.description, func(t *testing.T) {
-			defer func(h AuthConfigHelper) { DefaultAuthHelper = h }(DefaultAuthHelper)
-			DefaultAuthHelper = test.authType
+		testutil.Run(t, test.description, func(t *testutil.T) {
+			t.Override(&DefaultAuthHelper, test.authType)
 
-			out, err := encodedRegistryAuth(context.Background(), nil, test.authType, test.image)
-			testutil.CheckErrorAndDeepEqual(t, test.shouldErr, err, test.expected, out)
+			l := &localDaemon{}
+			out, err := l.encodedRegistryAuth(context.Background(), test.authType, test.image)
+
+			t.CheckErrorAndDeepEqual(test.shouldErr, err, test.expected, out)
 		})
 	}
 }

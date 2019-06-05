@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,18 +18,16 @@ package v1alpha3
 
 import (
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/util"
-	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const Version string = "skaffold/v1alpha3"
 
-// NewSkaffoldPipeline creates a SkaffoldPipeline
-func NewSkaffoldPipeline() util.VersionedConfig {
-	return new(SkaffoldPipeline)
+// NewSkaffoldConfig creates a SkaffoldConfig
+func NewSkaffoldConfig() util.VersionedConfig {
+	return new(SkaffoldConfig)
 }
 
-type SkaffoldPipeline struct {
+type SkaffoldConfig struct {
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`
 
@@ -38,7 +36,7 @@ type SkaffoldPipeline struct {
 	Profiles []Profile    `yaml:"profiles,omitempty"`
 }
 
-func (c *SkaffoldPipeline) GetVersion() string {
+func (c *SkaffoldConfig) GetVersion() string {
 	return c.APIVersion
 }
 
@@ -156,19 +154,19 @@ type KustomizeDeploy struct {
 }
 
 type HelmRelease struct {
-	Name              string                 `yaml:"name"`
-	ChartPath         string                 `yaml:"chartPath"`
-	ValuesFiles       []string               `yaml:"valuesFiles"`
-	Values            map[string]string      `yaml:"values,omitempty"`
-	Namespace         string                 `yaml:"namespace"`
-	Version           string                 `yaml:"version"`
-	SetValues         map[string]string      `yaml:"setValues"`
-	SetValueTemplates map[string]string      `yaml:"setValueTemplates"`
-	Wait              bool                   `yaml:"wait"`
-	RecreatePods      bool                   `yaml:"recreatePods"`
-	Overrides         map[string]interface{} `yaml:"overrides"`
-	Packaged          *HelmPackaged          `yaml:"packaged"`
-	ImageStrategy     HelmImageStrategy      `yaml:"imageStrategy"`
+	Name              string             `yaml:"name"`
+	ChartPath         string             `yaml:"chartPath"`
+	ValuesFiles       []string           `yaml:"valuesFiles"`
+	Values            map[string]string  `yaml:"values,omitempty"`
+	Namespace         string             `yaml:"namespace"`
+	Version           string             `yaml:"version"`
+	SetValues         map[string]string  `yaml:"setValues"`
+	SetValueTemplates map[string]string  `yaml:"setValueTemplates"`
+	Wait              bool               `yaml:"wait"`
+	RecreatePods      bool               `yaml:"recreatePods"`
+	Overrides         util.HelmOverrides `yaml:"overrides"`
+	Packaged          *HelmPackaged      `yaml:"packaged"`
+	ImageStrategy     HelmImageStrategy  `yaml:"imageStrategy"`
 }
 
 // HelmPackaged represents parameters for packaging helm chart.
@@ -185,8 +183,8 @@ type HelmImageStrategy struct {
 }
 
 type HelmImageConfig struct {
-	HelmFQNConfig        *HelmFQNConfig        `yaml:"fqn"`
-	HelmConventionConfig *HelmConventionConfig `yaml:"helm"`
+	HelmFQNConfig        *HelmFQNConfig        `yaml:"fqn" yamltags:"oneOf=helmImageStrategy"`
+	HelmConventionConfig *HelmConventionConfig `yaml:"helm" yamltags:"oneOf=helmImageStrategy"`
 }
 
 // HelmFQNConfig represents image config to use the FullyQualifiedImageName as param to set
@@ -228,19 +226,4 @@ type DockerArtifact struct {
 
 type BazelArtifact struct {
 	BuildTarget string `yaml:"target"`
-}
-
-// Parse reads a SkaffoldPipeline from yaml.
-func (c *SkaffoldPipeline) Parse(contents []byte, useDefaults bool) error {
-	if err := yaml.UnmarshalStrict(contents, c); err != nil {
-		return err
-	}
-
-	if useDefaults {
-		if err := c.SetDefaultValues(); err != nil {
-			return errors.Wrap(err, "applying default values")
-		}
-	}
-
-	return nil
 }

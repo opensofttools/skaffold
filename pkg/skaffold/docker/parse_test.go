@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,10 +22,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/schema/latest"
 	"github.com/GoogleContainerTools/skaffold/pkg/skaffold/util"
 	"github.com/GoogleContainerTools/skaffold/testutil"
-	"github.com/google/go-containerregistry/pkg/v1"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
 const copyServerGo = `
@@ -78,6 +77,13 @@ FROM busybox
 ENV foo bar
 WORKDIR ${foo}   # WORKDIR /bar
 COPY $foo /quux # COPY bar /quux
+`
+
+const multiEnvTest = `
+FROM busybox
+ENV baz=bar \
+    foo=docker
+COPY $foo/nginx.conf . # COPY docker/nginx.conf .
 `
 
 const copyDirectory = `
@@ -174,15 +180,30 @@ FROM nginx
 COPY . /
 `
 
+const fromScratch = `
+FROM scratch
+ADD ./file /etc/file
+`
+
+const fromScratchUppercase = `
+FROM SCRATCH
+ADD ./file /etc/file
+`
+
+const fromImageCaseSensitive = `
+FROM jboss/wildfly:14.0.1.Final
+ADD ./file /etc/file
+`
+
 type fakeImageFetcher struct {
 	fetched []string
 }
 
-func (f *fakeImageFetcher) fetch(image string) (*v1.ConfigFile, error) {
+func (f *fakeImageFetcher) fetch(image string, _ map[string]bool) (*v1.ConfigFile, error) {
 	f.fetched = append(f.fetched, image)
 
 	switch image {
-	case "ubuntu:14.04", "busybox", "nginx", "golang:1.9.2":
+	case "ubuntu:14.04", "busybox", "nginx", "golang:1.9.2", "jboss/wildfly:14.0.1.Final":
 		return &v1.ConfigFile{}, nil
 	case "golang:onbuild":
 		return &v1.ConfigFile{
@@ -194,7 +215,7 @@ func (f *fakeImageFetcher) fetch(image string) (*v1.ConfigFile, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("No image found for %s", image)
+	return nil, fmt.Errorf("no image found for %s", image)
 }
 
 func TestGetDependencies(t *testing.T) {
@@ -204,6 +225,7 @@ func TestGetDependencies(t *testing.T) {
 		workspace   string
 		ignore      string
 		buildArgs   map[string]*string
+		env         []string
 
 		expected  []string
 		fetched   []string
@@ -276,6 +298,13 @@ func TestGetDependencies(t *testing.T) {
 			dockerfile:  envTest,
 			workspace:   ".",
 			expected:    []string{"Dockerfile", "bar"},
+			fetched:     []string{"busybox"},
+		},
+		{
+			description: "multiple env test",
+			dockerfile:  multiEnvTest,
+			workspace:   ".",
+			expected:    []string{"Dockerfile", filepath.Join("docker", "nginx.conf")},
 			fetched:     []string{"busybox"},
 		},
 		{
@@ -437,16 +466,55 @@ func TestGetDependencies(t *testing.T) {
 			expected:    []string{"Dockerfile"},
 			fetched:     []string{"ubuntu:14.04"},
 		},
+		{
+			description: "from scratch",
+			dockerfile:  fromScratch,
+			workspace:   ".",
+			expected:    []string{"Dockerfile", "file"},
+			fetched:     nil,
+		},
+		{
+			description: "from scratch, ignoring case",
+			dockerfile:  fromScratchUppercase,
+			workspace:   ".",
+			expected:    []string{"Dockerfile", "file"},
+			fetched:     nil,
+		},
+		{
+			description: "case sensitive",
+			dockerfile:  fromImageCaseSensitive,
+			workspace:   ".",
+			expected:    []string{"Dockerfile", "file"},
+			fetched:     []string{"jboss/wildfly:14.0.1.Final"},
+		},
+		{
+			description: "build args with an environment variable",
+			dockerfile:  copyServerGoBuildArg,
+			workspace:   ".",
+			buildArgs:   map[string]*string{"FOO": util.StringPtr("{{.FILE_NAME}}")},
+			env:         []string{"FILE_NAME=server.go"},
+			expected:    []string{"Dockerfile", "server.go"},
+			fetched:     []string{"ubuntu:14.04"},
+		},
+		{
+			description: "invalid go template as build arg",
+			dockerfile:  copyServerGoBuildArg,
+			workspace:   ".",
+			buildArgs:   map[string]*string{"FOO": util.StringPtr("{{")},
+			shouldErr:   true,
+		},
 	}
-
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
+			util.OSEnviron = func() []string {
+				return test.env
+			}
 			tmpDir, cleanup := testutil.NewTempDir(t)
 			defer cleanup()
 
 			imageFetcher := fakeImageFetcher{}
-			RetrieveImage = imageFetcher.fetch
-			defer func() { RetrieveImage = retrieveImage }()
+			reset := testutil.Override(t, &RetrieveImage, imageFetcher.fetch)
+			defer reset()
 
 			for _, file := range []string{"docker/nginx.conf", "docker/bar", "server.go", "test.conf", "worker.go", "bar", "file", ".dot"} {
 				tmpDir.Write(file, "")
@@ -461,10 +529,7 @@ func TestGetDependencies(t *testing.T) {
 			}
 
 			workspace := tmpDir.Path(test.workspace)
-			deps, err := GetDependencies(context.Background(), workspace, &latest.DockerArtifact{
-				BuildArgs:      test.buildArgs,
-				DockerfilePath: "Dockerfile",
-			})
+			deps, err := GetDependencies(context.Background(), workspace, "Dockerfile", test.buildArgs, map[string]bool{})
 
 			testutil.CheckErrorAndDeepEqual(t, test.shouldErr, err, test.expected, deps)
 			testutil.CheckDeepEqual(t, test.fetched, imageFetcher.fetched)

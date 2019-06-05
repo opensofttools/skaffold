@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -77,7 +77,11 @@ func (*Commander) RunCmdOut(cmd *exec.Cmd) ([]byte, error) {
 		return stdout, errors.Wrapf(err, "Running %s: stdout %s, stderr: %s, err: %v", cmd.Args, stdout, stderr, err)
 	}
 
-	logrus.Debugf("Command output: stdout %s, stderr: %s", stdout, stderr)
+	if len(stderr) > 0 {
+		logrus.Debugf("Command output: [%s], stderr: %s", stdout, stderr)
+	} else {
+		logrus.Debugf("Command output: [%s]", stdout)
+	}
 
 	return stdout, nil
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Skaffold Authors
+Copyright 2019 The Skaffold Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package watch
 
 import (
 	"context"
+	"io/ioutil"
 	"sync"
 	"testing"
 	"time"
@@ -59,33 +60,29 @@ func TestWatch(t *testing.T) {
 			},
 		},
 	}
-
 	for _, test := range tests {
-		t.Run(test.description, func(t *testing.T) {
-			folder, cleanup := testutil.NewTempDir(t)
-			defer cleanup()
+		testutil.Run(t, test.description, func(t *testutil.T) {
+			folder := t.NewTempDir()
 
 			test.setup(folder)
 			folderChanged := newCallback()
 			somethingChanged := newCallback()
 
 			// Watch folder
-			watcher := NewWatcher()
+			watcher := NewWatcher(&pollTrigger{
+				Interval: 10 * time.Millisecond,
+			})
 			err := watcher.Register(folder.List, folderChanged.call)
-			testutil.CheckError(t, false, err)
+			t.CheckError(false, err)
 
 			// Run the watcher
 			ctx, cancel := context.WithCancel(context.Background())
 			var stopped sync.WaitGroup
 			stopped.Add(1)
 			go func() {
-				trigger := &pollTrigger{
-					Interval: 10 * time.Millisecond,
-				}
-
-				err = watcher.Run(ctx, trigger, somethingChanged.callNoErr)
+				err = watcher.Run(ctx, ioutil.Discard, somethingChanged.callNoErr)
 				stopped.Done()
-				testutil.CheckError(t, false, err)
+				t.CheckError(false, err)
 			}()
 
 			test.update(folder)
